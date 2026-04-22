@@ -1,4 +1,4 @@
-# Autonomous Driving Perception Pipeline
+# CUVision - Autonomous Driving Perception Pipeline
 
 A complete real-time autonomous driving perception system combining road segmentation, lane detection, and traffic sign recognition. Built for deployment via ROS2 Jazzy with MATLAB/Simulink integration.
 
