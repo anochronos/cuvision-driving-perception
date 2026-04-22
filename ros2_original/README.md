@@ -61,19 +61,28 @@ colcon build --packages-select controller --symlink-install
 source install/setup.bash
 ```
 
-### Run all nodes
+### Quick launch (all nodes at once)
 
 ```bash
-# Terminal 1: TCP receiver (or video publisher for testing)
+# TCP mode (receives frames from Simulink)
+bash run_pipeline.sh
+
+# Video file mode (for testing without Simulink)
+bash run_pipeline.sh --video /path/to/video.mp4
+```
+
+The script builds the workspace, then opens each node in its own terminal. Override the ROS distro or workspace path with environment variables if needed:
+
+```bash
+ROS_DISTRO=humble ROS_WS=~/my_ws bash run_pipeline.sh
+```
+
+### Run nodes individually
+
+```bash
 ros2 run controller tcp_receiver_node
-
-# Terminal 2: Lane detection
 ros2 run controller lane_detection_node
-
-# Terminal 3: Object detection
 ros2 run controller object_detection_node
-
-# Terminal 4: Visualization
 ros2 run controller visualization_node
 ```
 
