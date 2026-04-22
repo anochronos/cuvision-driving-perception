@@ -1,0 +1,19 @@
+# Core
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0
+opencv-python>=4.8.0
+tqdm>=4.65.0
+pillow>=9.5.0
+pyyaml>=6.0
+
+# Detection
+ultralytics>=8.0.0
+
+# Optional: faster inference
+# onnx>=1.14.0
+# onnxruntime-gpu>=1.16.0
+# tensorrt>=8.6.0
+
+# Install PyTorch with CUDA 12.1:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121

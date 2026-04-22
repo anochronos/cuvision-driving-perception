@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+*.engine
+*.trt
+.env
+*.Zone.Identifier
+build/
+install/
+log/

@@ -1,0 +1,36 @@
+tcp_camera_node:
+  ros__parameters:
+    host: "0.0.0.0"
+    port: 12345
+    use_udp: false
+    image_h: 720
+    image_w: 1280
+    publish_rate: 30.0
+
+tlnp_node:
+  ros__parameters:
+    weight_path: "/home/akshun-wsl/capstone-tlnp/TwinLiteNetPlus/trained-models/large.pth"
+    config: "large"
+    img_size: 640
+    use_half: true
+    skip_frames: 2
+    engine_path: ""
+    onnx_path: ""
+
+detection_node:
+  ros__parameters:
+    detector_path: "/home/akshun-wsl/capstone-objectdet/data/mtsd_yolo26n_detector/weights/epoch90.pt"
+    classifier_path: "/home/akshun-wsl/capstone-objectdet/ObjectDetection/classifier_model/best_classifier.pt"
+    det_conf: 0.15
+    det_iou: 0.45
+    cls_conf: 0.5
+    det_imgsz: 960
+    temporal_smoothing: true
+    smooth_frames: 5
+
+viz_node:
+  ros__parameters:
+    web_port: 8080
+    jpeg_quality: 80
+    save_video: false
+    video_path: "output_ros2.mp4"

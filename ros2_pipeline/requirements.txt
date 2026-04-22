@@ -1,0 +1,22 @@
+# Core dependencies
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0
+opencv-python>=4.8.0
+tqdm>=4.65.0
+pillow>=9.5.0
+
+# Detection pipeline
+ultralytics>=8.0.0
+
+# Optional: faster inference backends
+# onnx>=1.14.0
+# onnxruntime-gpu>=1.16.0
+# tensorrt>=8.6.0
+
+# Note: rclpy, sensor_msgs, std_msgs are provided by the ROS2 Jazzy
+# system install and inherited via --system-site-packages venv.
+# Do NOT install them via pip.
+
+# Install PyTorch with CUDA 12.1:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
