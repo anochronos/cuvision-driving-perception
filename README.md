@@ -1,8 +1,22 @@
-# CUVision - Autonomous Driving Perception Pipeline
+# CUVision: Autonomous Driving Perception Pipeline
 
-A complete real-time autonomous driving perception system combining road segmentation, lane detection, and traffic sign recognition. Built for deployment via ROS2 Jazzy with MATLAB/Simulink integration.
+Real-time road segmentation, lane detection, and traffic sign recognition from a single camera feed. It runs as a four-node ROS2 Jazzy pipeline, streams to a browser viewer, and can be driven live from the CARLA simulator.
 
-## System Overview
+This started as our Carleton University Software Engineering capstone. I was the perception lead, and the [My contributions](#my-contributions) section below spells out which parts are mine.
+
+<!-- Replace with your own GIF or screenshot from docs/ -->
+![CUVision Lane Component](docs/lane_per.gif)
+![CUVision Sign Component](docs/lane_det.png)
+![CUVision Sign Component](docs/lane_det2.png)
+
+## What it does
+
+Each frame goes through two models running side by side:
+
+- **TwinLiteNetPlus** produces the drivable-area mask and lane lines in one pass.
+- **A two-stage sign pipeline** finds signs with a single-class YOLO26n detector, then identifies each crop with a MobileNetV3-Small classifier trained on 252 sign classes.
+
+The results are fused and shown in an MJPEG web viewer. Frames can come from CARLA or from a Simulink model over TCP.
 
 ```
 Camera (Simulink/TCP or CARLA) ──> Road Segmentation (TwinLiteNetPlus)
@@ -13,175 +27,133 @@ Camera (Simulink/TCP or CARLA) ──> Road Segmentation (TwinLiteNetPlus)
                                ROS2 Fusion / MJPEG Web Viewer
 ```
 
-### Components
+## Results
 
-| Component | Model | Params | Speed | Purpose |
-|-----------|-------|--------|-------|---------|
-| **Segmentation** | TwinLiteNetPlus-Large | 1.9M | ~150 FPS (TRT) | Drivable area + lane lines |
-| **Sign Detector** | YOLO26n (single-class) | 2.6M | ~60 FPS | Locates traffic signs |
-| **Sign Classifier** | MobileNetV3-Small | 2.5M | ~200 FPS | Identifies 252 sign types |
-| **ROS2 Pipeline** | 4-node architecture | - | 15+ FPS end-to-end | Real-time fusion + web viewer |
-| **CARLA Pipeline** | All of the above | - | 15+ FPS live | Simulator integration + browser controls |
+All benchmarks use an RTX 4080 SUPER, FP16, 384x640 input.
 
-## Directory Structure
+**Speed against YOLOPX**
 
-```
-capstone-master/
-├── segmentation/               # TwinLiteNetPlus road segmentation
-│   ├── model/                  # Network architecture
-│   ├── hyperparameters/        # Training configs (base, snow finetune)
-│   ├── weights/                # Trained model weights
-│   ├── src/                    # Post-processing modules
-│   │   ├── lane_splitter.py    # DA mask → lane divider post-processing
-│   │   └── road_info.py        # OSM road metadata for lane-aware splitting
-│   ├── train.py                # Training script
-│   ├── BDD100K.py              # Dataset loader (with weather filtering)
-│   ├── utils.py                # Validation, metrics, utilities
-│   ├── demo.py                 # Image/video inference + lane splitting
-│   ├── demoDataset.py          # Inference preprocessing
-│   └── README.md
-│
-├── detection/                  # Two-stage traffic sign detection
-│   ├── weights/                # YOLO detector weights
-│   ├── classifier_model/       # MobileNetV3 classifier + class names
-│   ├── train_single_class_detector.py
-│   ├── train_classifier.py
-│   ├── two_stage_pipeline.py   # Combined inference pipeline
-│   └── README.md
-│
-├── ros2_pipeline/              # ROS2 Jazzy deployment package
-│   ├── driving_pipeline/       # ROS2 node source code
-│   ├── config/                 # Node parameters (YAML)
-│   ├── launch/                 # Launch files
-│   ├── scripts/                # Export tools, test utilities
-│   └── README.md
-│
-├── carla/                      # CARLA 0.9.15 simulator integration
-│   ├── carla_pipeline.py       # Main script (connect, drive, infer, view)
-│   └── README.md
-│
-├── ros2_original/              # Original ROS2 implementation (by Omar)
-│   ├── controller/             # ROS2 node source code
-│   │   ├── tcp_receiver_node.py
-│   │   ├── lane_detection_node.py
-│   │   ├── object_detection_node.py
-│   │   ├── visualization_node.py
-│   │   └── video_publisher.py
-│   └── README.md
-│
-├── scripts/                    # Benchmarking and evaluation
-│   ├── benchmark_speed.py      # TLNP vs YOLOPX speed comparison
-│   ├── fair_accuracy_benchmark.py  # Fair accuracy evaluation
-│   └── eval_snow_subset.py     # Snow weather subset evaluation
-│
-├── requirements.txt            # Python dependencies
-└── README.md                   # This file
-```
+| Model                 | Params | Mean (ms) | FPS |
+| --------------------- | ------ | --------- | --- |
+| TwinLiteNetPlus-Large | 1.9M   | 3.37      | 297 |
+| YOLOPX                | 33.1M  | 7.21      | 139 |
 
-## Quick Start
+TwinLiteNetPlus is 2.14x faster with 17x fewer parameters.
 
-### 1. Install dependencies
+**Accuracy on BDD100K validation (10K images)**
+
+| Metric      | TLNP-Large | YOLOPX |
+| ----------- | ---------- | ------ |
+| DA mIoU     | 0.9291     | 0.9316 |
+| DA Accuracy | 0.9752     | 0.9762 |
+| LL IoU      | 0.3420     | 0.2716 |
+| LL Accuracy | 0.8223     | 0.7968 |
+
+It is within half a point of YOLOPX on drivable area and clearly ahead on lane lines (+26% relative IoU).
+
+**Other numbers**
+
+- Fine-tuning on snow scenes from BDD100K improved drivable-area mIoU by 5.17% and lane IoU by 5.93%.
+- The sign classifier reaches up to 99.4% top-1 accuracy.
+- The full ROS2 pipeline and the CARLA pipeline both sustain 15+ FPS end to end.
+
+## Components
+
+| Component       | Model                  | Params | Job                          |
+| --------------- | ---------------------- | ------ | ---------------------------- |
+| Segmentation    | TwinLiteNetPlus-Large  | 1.9M   | Drivable area and lane lines |
+| Sign detector   | YOLO26n (single-class) | 2.6M   | Locates traffic signs        |
+| Sign classifier | MobileNetV3-Small      | 2.5M   | Identifies 252 sign types    |
+| ROS2 pipeline   | 4-node architecture    | n/a    | Fusion and web viewer        |
+| CARLA pipeline  | All of the above       | n/a    | Simulator integration        |
+
+## Quick start
+
+### Install
 
 ```bash
-# Create conda environment (recommended for training)
 conda create -n driving python=3.10 -y
 conda activate driving
-
 pip install -r requirements.txt
 ```
 
-### 2. Train models (or use provided weights)
-
-See component READMEs for details:
-- [Segmentation](segmentation/README.md)
-- [Detection](detection/README.md)
-- [CARLA Integration](carla/README.md)
-- [ROS2 Deployment](ros2_pipeline/README.md)
-- [Original ROS2 Pipeline](ros2_original/README.md)
-
-### 3. Run inference
+### Run the models on a video
 
 ```bash
-# Segmentation on video
+# Road segmentation and lane lines
 cd segmentation
 python demo.py --source /path/to/video.mp4 --weight weights/large.pth --config large
 
-# Two-stage sign detection on video
+# Two-stage sign detection
 cd detection
 python two_stage_pipeline.py
 ```
 
-### 4. Run with CARLA simulator
-
-See [CARLA Pipeline README](carla/README.md) for full setup.
+### Run in CARLA
 
 ```bash
 cd carla
 conda run -n carla python carla_pipeline.py --carla-host <WINDOWS_IP>
-# Open http://localhost:8080
+# then open http://localhost:8080
 ```
 
-### 5. Deploy with ROS2
+Full setup is in the [CARLA README](carla/README.md).
 
-See [ROS2 Pipeline README](ros2_pipeline/README.md) for full setup.
+### Deploy on ROS2
 
 ```bash
-# Quick launch (after ROS2 setup)
 source /opt/ros/jazzy/setup.bash
 source ~/ros2_ws/install/setup.bash
 ros2 launch driving_pipeline pipeline_launch.py
 ```
 
-## Hardware Requirements
+Full setup is in the [ROS2 README](ros2_pipeline/README.md).
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| GPU | NVIDIA GTX 1060 (6GB) | RTX 4080+ |
-| VRAM | 4 GB | 8+ GB |
-| RAM | 8 GB | 16+ GB |
-| Storage | 10 GB (models + code) | 50+ GB (with BDD100K dataset) |
+## Hardware
 
-## Dataset
+| Component | Minimum               | Recommended                   |
+| --------- | --------------------- | ----------------------------- |
+| GPU       | NVIDIA GTX 1060 (6GB) | RTX 4080 or better            |
+| VRAM      | 4 GB                  | 8+ GB                         |
+| RAM       | 8 GB                  | 16+ GB                        |
+| Storage   | 10 GB                 | 50+ GB (with BDD100K dataset) |
 
-All models are trained on [BDD100K](https://www.bdd100k.com/):
-- 100K driving videos, 10 cities
-- Drivable area and lane line annotations
-- Weather/scene labels (used for snow subset filtering)
+## Repository layout
 
-Traffic sign detection uses [MTSD](https://www.mapillary.com/dataset/trafficsign) (Mapillary Traffic Sign Dataset):
-- 250+ North American sign classes
-- Converted to single-class for Stage 1 detector
-- PNG templates for Stage 2 classifier training
+```
+cuvision-driving-perception/
+├── segmentation/    TwinLiteNetPlus training, inference, lane splitting
+├── detection/       Two-stage sign detector and classifier
+├── ros2_pipeline/   ROS2 Jazzy package (nodes, configs, launch files)
+├── carla/           CARLA 0.9.15 integration and browser viewer
+├── ros2_original/   Earlier ROS2 implementation by a teammate (Omar)
+├── scripts/         Speed, accuracy, and snow-subset benchmarks
+├── docs/            Images and supporting material
+└── requirements.txt
+```
 
-## Benchmark Results
+Each component folder has its own README with training and usage details.
 
-### Speed (RTX 4080 SUPER, FP16, 384x640)
+## Datasets
 
-| Model | Params | Mean (ms) | FPS |
-|-------|--------|-----------|-----|
-| TwinLiteNetPlus-Large | 1.9M | 3.37 | 297 |
-| YOLOPX | 33.1M | 7.21 | 139 |
+- **[BDD100K](https://www.bdd100k.com/)** for segmentation training and evaluation. I used the drivable-area and lane annotations, plus the weather labels to build the snow subset.
+- **[MTSD](https://www.mapillary.com/dataset/trafficsign)** for the sign models. The labels are collapsed to a single class for the Stage 1 detector, and PNG templates are used to train the Stage 2 classifier.
 
-TwinLiteNetPlus is **2.14x faster** with **17x fewer parameters**.
+## My contributions
 
-### Accuracy (BDD100K val, 10K images)
+I led perception on a team project. My work:
 
-| Metric | TLNP-Large | YOLOPX |
-|--------|------------|--------|
-| DA mIOU | 0.9291 | 0.9316 |
-| DA Accuracy | 0.9752 | 0.9762 |
-| LL IOU | 0.3420 | 0.2716 |
-| LL Accuracy | 0.8223 | 0.7968 |
+- Set up and trained the road segmentation and lane detection models, including the snow fine-tuning and the benchmarks against YOLOPX.
+- Built the two-stage traffic sign pipeline (detector and classifier).
+- Set up CARLA and wrote the integration pipeline that feeds simulator frames through the models.
 
-TLNP matches YOLOPX on drivable area and **beats it on lane line detection** (+26% IOU).
+The base TwinLiteNetPlus architecture and training code come from the upstream repo credited below. The original ROS2 nodes in `ros2_original/` were written by a teammate.
 
 ## Acknowledgments
 
-- [TwinLiteNetPlus](https://github.com/chiraqL/TwinLiteNetPlus) - base segmentation model architecture and training code by chiraqL
-- [Ultralytics](https://github.com/ultralytics/ultralytics) - YOLOv8/YOLO26n framework used for the sign detector
-- [BDD100K](https://www.bdd100k.com/) - driving dataset for segmentation training and evaluation (Yu et al., 2020)
-- [MTSD](https://www.mapillary.com/dataset/trafficsign) - Mapillary Traffic Sign Dataset for detector and classifier training (Ertler et al., 2020)
-- [YOLOPX](https://github.com/CAIC-AD/YOLOPv2) - used as accuracy and speed baseline for benchmarking
-- [CARLA](https://carla.org/) - open-source autonomous driving simulator (Dosovitskiy et al., 2017)
-- [ROS2 Jazzy](https://docs.ros.org/en/jazzy/) - middleware for the deployment pipeline
-- [PyTorch](https://pytorch.org/) and [torchvision](https://pytorch.org/vision/) - deep learning framework
+- [TwinLiteNetPlus](https://github.com/chiraqL/TwinLiteNetPlus) by chiraqL: base segmentation architecture and training code
+- [Ultralytics](https://github.com/ultralytics/ultralytics): framework behind the sign detector
+- [BDD100K](https://www.bdd100k.com/) (Yu et al., 2020) and [MTSD](https://www.mapillary.com/dataset/trafficsign) (Ertler et al., 2020): training data
+- [YOLOPX](https://github.com/CAIC-AD/YOLOPv2): speed and accuracy baseline
+- [CARLA](https://carla.org/) (Dosovitskiy et al., 2017): simulator
+- [ROS2 Jazzy](https://docs.ros.org/en/jazzy/), [PyTorch](https://pytorch.org/), and [torchvision](https://pytorch.org/vision/)
